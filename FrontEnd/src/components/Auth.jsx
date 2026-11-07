@@ -8,14 +8,13 @@ export default function Auth({ initialMode = 'login', onLoginSuccess, onModeChan
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const switchMode = () => {
-    setIsLogin((current) => {
-      const next = !current;
-      onModeChange?.(next ? 'login' : 'register');
-      return next;
-    });
+    const next = !isLogin;
+    setIsLogin(next);
+    onModeChange?.(next ? 'login' : 'register');
     setMessage('');
   };
 
@@ -33,7 +32,8 @@ export default function Auth({ initialMode = 'login', onLoginSuccess, onModeChan
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
+      // A proxy error (e.g. backend still starting) returns HTML rather than JSON.
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(data.message || data.error || 'Something went wrong. Please try again.');
@@ -45,13 +45,15 @@ export default function Auth({ initialMode = 'login', onLoginSuccess, onModeChan
         }
         onLoginSuccess?.(data.token, data.user);
       } else {
+        setIsError(false);
         setMessage('You’re on the list! Sign in to get started.');
         setIsLogin(true);
         onModeChange?.('login');
         setPassword('');
       }
     } catch (error) {
-      setMessage(error.message || 'We couldn’t connect. Please try again.');
+      setIsError(true);
+      setMessage(error instanceof TypeError ? 'We couldn’t connect. Please try again.' : error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -59,7 +61,7 @@ export default function Auth({ initialMode = 'login', onLoginSuccess, onModeChan
 
   return (
     <div className="auth-content">
-      <div className="auth-eyebrow">GOOD FOOD STARTS HERE</div>
+      <div className="auth-eyebrow">Good food starts here</div>
       <h2>{isLogin ? 'Welcome back.' : 'Come on in.'}</h2>
       <p className="auth-subtitle">{isLogin ? 'Your next favorite meal is just a sign-in away.' : 'Create an account and make every craving count.'}</p>
       <form onSubmit={handleSubmit} className="auth-form">
@@ -99,10 +101,9 @@ export default function Auth({ initialMode = 'login', onLoginSuccess, onModeChan
             required
           />
         </label>
-        {message && <p className="auth-message" role="status">{message}</p>}
+        {message && <p className={`auth-message ${isError ? 'is-error' : 'is-success'}`} role="status">{message}</p>}
         <button className="primary-button auth-submit" type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'One moment...' : isLogin ? 'Sign in to Crave Club' : 'Create my account'}
-          {!isSubmitting && <span>↗</span>}
         </button>
       </form>
       <p className="auth-switch">
