@@ -1,13 +1,15 @@
-# Step 1: Build the React application
-FROM node:20-alpine AS build
+# Stage 1: build the static React bundle
+FROM node:24-alpine AS build
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 RUN npm run build
 
-# Step 2: Serve the app using Nginx web server
-FROM nginx:alpine
+# Stage 2: serve it with a non-root Nginx (listens on 8080)
+FROM nginxinc/nginx-unprivileged:stable-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1:8080/healthz || exit 1

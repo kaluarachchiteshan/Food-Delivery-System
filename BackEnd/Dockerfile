@@ -1,18 +1,18 @@
-# Use Node.js 20 Alpine image
-FROM node:20-alpine
-
-# Set the working directory inside the container
+FROM node:24-alpine
+ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package*.json ./
-RUN npm install
+# Install only production dependencies, from the lockfile, for repeatable builds
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
-# Copy the rest of the backend application code
 COPY . .
 
-# Expose the backend port (change this to 4000 or your app's specific port if it's not 5000)
+# The official image ships an unprivileged "node" user
+USER node
 EXPOSE 5000
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=5 \
+  CMD wget -q --spider http://127.0.0.1:5000/api/health || exit 1
 
-# Command to start your server
-CMD ["npm", "start"]
+# Run node directly (not through npm) so it receives stop signals
+CMD ["node", "server.js"]
