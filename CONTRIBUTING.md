@@ -1,6 +1,6 @@
 # Contributing
 
-This project uses two long-lived branches. Nobody pushes to them directly; every change goes through a pull request.
+This project uses two long-lived branches. Nobody pushes to them directly; every change goes through a pull request. `develop` is the default branch, and `main` holds only what is deployed.
 
 | Branch    | Purpose                                     | Changes come from        |
 | --------- | ------------------------------------------- | ------------------------ |
@@ -36,6 +36,17 @@ git pull
 git switch feature/short-description
 git merge develop
 ```
+
+## Automated checks
+
+Every pull request into `develop` or `main` runs the CI workflow in `.github/workflows/ci.yml`:
+
+- **Frontend lint and build**: `npm run lint` and `npm run build`
+- **Backend install and syntax check**: `npm ci` and `node --check`
+- **Docker images build**: `docker compose build`
+- **main branch policy**: on pull requests into `main`, fails unless the source branch is `develop` or `hotfix/*`
+
+Do not merge a pull request while a check is failing.
 
 ## Branch names
 
