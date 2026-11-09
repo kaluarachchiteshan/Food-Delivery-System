@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # main is for deployment only: it accepts pull requests from develop (releases)
+  # or hotfix/* branches, never from feature branches.
+  main-branch-policy:
+    name: main branch policy
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" = "develop" ] || [[ "$HEAD_REF" == hotfix/* ]]; then
+            echo "OK: $HEAD_REF may be merged into main."
+          else
+            echo "::error::Pull requests into main must come from develop or hotfix/*, not '$HEAD_REF'. Change the base branch to develop."
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FrontEnd
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: FrontEnd/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  backend:
+    name: Backend install and syntax check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BackEnd
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: BackEnd/package-lock.json
+      - run: npm ci --omit=dev
+      - name: Check JavaScript syntax
+        run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    env:
+      # Placeholder values: compose requires them, but nothing connects to a database here.
+      JWT_SECRET: ci-placeholder-secret
+      MONGO_URI: mongodb://ci-placeholder:27017/food-delivery
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker compose config --quiet
+      - run: docker compose build
