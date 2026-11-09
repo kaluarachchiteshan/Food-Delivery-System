@@ -1,15 +1,21 @@
 # Crave Club: Food Delivery System
 
-A food ordering web app with a React frontend, a Node/Express API and MongoDB, packaged with Docker.
+A food ordering web app with a React frontend, a Node/Express API and MongoDB Atlas, packaged with Docker.
 
 ## Run with Docker
 
 ```bash
-cp .env.example .env    # then set JWT_SECRET to a random value
+cp .env.example .env    # then set JWT_SECRET and MONGO_URI
 docker compose up -d --build
 ```
 
-Open http://localhost:8081. To stop it, run `docker compose down`. Your data stays in the `mongo_data` volume.
+Open http://localhost:8081. To stop it, run `docker compose down`. Data is stored in MongoDB Atlas.
+
+### MongoDB Atlas setup
+
+1. Create a cluster and a database user with read and write access.
+2. Under **Network Access**, add the IP address of the machine running Docker.
+3. Copy the Node.js connection string into `MONGO_URI` in `.env`, with `/food-delivery` before the `?`.
 
 ## Architecture
 
@@ -17,9 +23,8 @@ Open http://localhost:8081. To stop it, run `docker compose down`. Your data sta
 | ---------- | -------------------------------------- | ------------------ | ----------------------------------------- |
 | `frontend` | Nginx (unprivileged), multi-stage build | `8081` on the host | Serves the site, forwards `/api` to backend |
 | `backend`  | Node 24 Alpine                         | Internal only      | Register and login API                    |
-| `database` | MongoDB 8.3                            | Internal only      | Stores users                              |
 
-Startup is ordered by health checks: database, then backend, then frontend. The `data` network keeps the database unreachable from the frontend container.
+The frontend starts once the backend reports healthy, which requires a working connection to Atlas.
 
 Useful commands:
 
@@ -30,7 +35,7 @@ docker compose logs -f backend
 
 ## Run without Docker
 
-Requires Node 22+ and a MongoDB on `localhost:27017`.
+Requires Node 22+. Set `MONGO_URI` in `BackEnd/.env` to your Atlas connection string.
 
 ```bash
 cd BackEnd && cp .env.example .env && npm install && npm start
@@ -44,4 +49,4 @@ The frontend runs on http://localhost:5173 and forwards `/api` to port 5000.
 
 ## Current limits
 
-Sign up and login are real and stored in MongoDB. The menu, bag and checkout run in the browser only, so orders are not saved yet.
+Sign up and login are real and stored in MongoDB Atlas. The menu, bag and checkout run in the browser only, so orders are not saved yet.
