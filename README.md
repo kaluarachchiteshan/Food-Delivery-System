@@ -47,6 +47,10 @@ cd FrontEnd && npm install && npm run dev
 
 The frontend runs on http://localhost:5173 and forwards `/api` to port 5000.
 
+## Contributing
+
+Work happens on `feature/*` branches merged into `develop` through pull requests. `main` only receives releases from `develop`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Current limits
 
 Sign up and login are real and stored in MongoDB Atlas. The menu, bag and checkout run in the browser only, so orders are not saved yet.
