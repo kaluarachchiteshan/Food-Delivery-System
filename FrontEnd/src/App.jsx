@@ -122,6 +122,8 @@ const ICONS = {
   close: <path d="M6 6l12 12M18 6 6 18" />,
   heart: <path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.500 15.400 12 20 12 20Z" />,
   lock: <path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z" />,
+  moon: <path d="M20 14.5A8 8 0 1 1 9.500 4a6.500 6.500 0 0 0 10.500 10.500Z" />,
+  sun: <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-14v2m0 16v2M4.900 4.900l1.400 1.400m11.400 11.400 1.400 1.400M2 12h2m16 0h2M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400" />,
   pin: <path d="M12 21s7-6.100 7-11.500a7 7 0 1 0-14 0C5 14.900 12 21 12 21Zm0-9a2.500 2.500 0 1 0 0-5 2.500 2.500 0 0 0 0 5Z" />,
   scooter: <path d="M6 18a2.500 2.500 0 1 0 0-5 2.500 2.500 0 0 0 0 5Zm12 0a2.500 2.500 0 1 0 0-5 2.500 2.500 0 0 0 0 5ZM8.500 15.500H15c0-4 1-6 3-7l-1-3h-2.500M3 11h6l1.500 4.500" />,
   search: <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm9 2-4-4" />,
@@ -153,10 +155,36 @@ const imageUrl = (id, width = 700) =>
 
 // Keeps the layout intact when the image CDN is unreachable (offline demos, locked-down networks).
 function FoodImage({ id, width, alt, ...props }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return <div className="image-fallback" role="img" aria-label={alt}>🍽️</div>;
-  return <img src={imageUrl(id, width)} alt={alt} onError={() => setFailed(true)} {...props} />;
+  const [status, setStatus] = useState('loading');
+  if (status === 'failed') return <div className="image-fallback" role="img" aria-label={alt}>🍽️</div>;
+  return (
+    <img
+      src={imageUrl(id, width)}
+      alt={alt}
+      className={`fade-img ${status === 'loaded' ? 'is-loaded' : ''}`}
+      onLoad={() => setStatus('loaded')}
+      onError={() => setStatus('failed')}
+      {...props}
+    />
+  );
 }
+
+// One entry per restaurant, built from the menu so the two never disagree.
+const KITCHENS = Object.values(FOOD.reduce((kitchens, food) => {
+  const kitchen = kitchens[food.restaurant] ??= {
+    name: food.restaurant,
+    cuisine: food.category,
+    image: food.image,
+    time: food.time,
+    dishes: 0,
+    ratingTotal: 0,
+  };
+  kitchen.dishes += 1;
+  kitchen.ratingTotal += Number(food.rating);
+  return kitchens;
+}, {})).map(({ ratingTotal, ...kitchen }) => ({ ...kitchen, rating: (ratingTotal / kitchen.dishes).toFixed(1) }));
+
+const prefersDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 
 function Brand({ className = '' }) {
   return (
@@ -209,6 +237,47 @@ function App() {
   const [couponApplied, setCouponApplied] = useState(false);
   const [checkout, setCheckout] = useState(false);
   const [order, setOrder] = useState(null);
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('crave-theme');
+      return saved === 'dark' || saved === 'light' ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const isDark = theme ? theme === 'dark' : prefersDark();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme) root.dataset.theme = theme;
+    else delete root.dataset.theme;
+  }, [theme]);
+
+  const toggleTheme = () => {
+    const next = isDark ? 'light' : 'dark';
+    setTheme(next);
+    try { localStorage.setItem('crave-theme', next); } catch { /* storage unavailable */ }
+  };
+
+  // Fades sections in as they scroll into view. Skipped for reduced motion.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return undefined;
+    const root = document.documentElement;
+    root.classList.add('reveal-ready');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('[data-reveal]').forEach((element) => observer.observe(element));
+    return () => {
+      observer.disconnect();
+      root.classList.remove('reveal-ready');
+    };
+  }, []);
 
   const closeCart = () => {
     setCartOpen(false);
@@ -335,10 +404,18 @@ function App() {
 
   const scrollToMenu = () => document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' });
 
+  const chooseKitchen = (kitchen) => {
+    const isActive = search === kitchen.name;
+    setSearch(isActive ? '' : kitchen.name);
+    setActiveCategory(ALL);
+    if (!isActive) scrollToMenu();
+  };
+
   const chips = [...CATEGORIES, { name: SAVED, emoji: '❤️', count: favorites.length }];
+  const showBagBar = itemCount > 0 && !overlayOpen;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${showBagBar ? 'has-bag-bar' : ''}`}>
       <div className="announcement">Free delivery on orders over ${FREE_DELIVERY_AT}. Use <strong>CRAVE10</strong> for 10% off your first bag.</div>
 
       <header className="site-header">
@@ -349,10 +426,19 @@ function App() {
             <span><small>Delivering to</small><strong>Brooklyn, NY</strong></span>
           </button>
           <nav className="header-links" aria-label="Main navigation">
-            <a href="#menu">Explore</a>
+            <a href="#menu">Menu</a>
+            <a href="#kitchens">Kitchens</a>
             <a href="#how-it-works">How it works</a>
           </nav>
           <div className="header-actions">
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={isDark ? 'Light theme' : 'Dark theme'}
+            >
+              <Icon name={isDark ? 'sun' : 'moon'} size={19} />
+            </button>
             {user ? (
               <button className="user-button" onClick={handleLogout} title="Sign out">
                 <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
@@ -401,12 +487,43 @@ function App() {
           </div>
         </section>
 
+        <section className="kitchens" id="kitchens" data-reveal>
+          <div className="kitchens-heading">
+            <div>
+              <div className="eyebrow">Local favorites</div>
+              <h2>Kitchens near you</h2>
+            </div>
+            <p>Tap a kitchen to see only its dishes.</p>
+          </div>
+          <div className="kitchen-list">
+            {KITCHENS.map((kitchen) => (
+              <button
+                key={kitchen.name}
+                className={`kitchen ${search === kitchen.name ? 'selected' : ''}`}
+                aria-pressed={search === kitchen.name}
+                onClick={() => chooseKitchen(kitchen)}
+              >
+                <span className="kitchen-photo"><FoodImage id={kitchen.image} width={200} alt="" loading="lazy" /></span>
+                <span className="kitchen-info">
+                  <strong>{kitchen.name}</strong>
+                  <small>{kitchen.cuisine} · {kitchen.time}</small>
+                  <span className="kitchen-meta">
+                    <span className="food-rating"><Icon name="star" size={13} filled />{kitchen.rating}</span>
+                    <span>{kitchen.dishes} {kitchen.dishes === 1 ? 'dish' : 'dishes'}</span>
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="menu-section" id="menu">
           <div className="section-topline">
-            <div>
-              <div className="eyebrow">A very good place to start</div>
-              <h2>What sounds <em>good?</em></h2>
-            </div>
+            <div className="eyebrow">A very good place to start</div>
+            <h2>What sounds <em>good?</em></h2>
+          </div>
+
+          <div className="menu-toolbar">
             <div className="search-box">
               <Icon name="search" size={20} />
               <input
@@ -420,28 +537,33 @@ function App() {
                 ? <button onClick={() => setSearch('')} aria-label="Clear search"><Icon name="close" size={16} /></button>
                 : <kbd>Ctrl K</kbd>}
             </div>
+
+            <div className="category-list" role="group" aria-label="Filter by food category">
+              {chips.map((category) => (
+                <button
+                  key={category.name}
+                  className={`category-chip ${activeCategory === category.name ? 'selected' : ''}`}
+                  aria-pressed={activeCategory === category.name}
+                  onClick={() => setActiveCategory(category.name)}
+                >
+                  <span>{category.emoji}</span>{category.name}
+                  {category.count > 0 && <b>{category.count}</b>}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="category-list" role="group" aria-label="Filter by food category">
-            {chips.map((category) => (
-              <button
-                key={category.name}
-                className={`category-chip ${activeCategory === category.name ? 'selected' : ''}`}
-                aria-pressed={activeCategory === category.name}
-                onClick={() => setActiveCategory(category.name)}
-              >
-                <span>{category.emoji}</span>{category.name}
-                {category.count > 0 && <b>{category.count}</b>}
-              </button>
-            ))}
-          </div>
+          <p className="results-count" aria-live="polite">
+            {filteredFood.length} {filteredFood.length === 1 ? 'dish' : 'dishes'}
+            {search && <> for “{search}”</>}
+          </p>
 
           <div className="food-grid">
-            {filteredFood.map((food) => {
+            {filteredFood.map((food, index) => {
               const isFavorite = favorites.includes(food.id);
               const inCart = cart.find((item) => item.id === food.id);
               return (
-                <article className="food-card" key={food.id}>
+                <article className="food-card" key={food.id} style={{ '--i': index }}>
                   <div className="food-image-wrap">
                     <FoodImage id={food.image} alt={food.name} loading="lazy" />
                     <span className="food-tag">{food.tag}</span>
@@ -483,12 +605,12 @@ function App() {
 
         <section className="promise-section" id="how-it-works">
           <div className="promise-inner">
-            <div className="promise-heading">
+            <div className="promise-heading" data-reveal>
               <div className="eyebrow">The Crave Club way</div>
               <h2>Good food. <em>No fuss.</em></h2>
               <p>A neighborhood favorite, from first tap to first bite.</p>
             </div>
-            <ol className="promise-grid">
+            <ol className="promise-grid" data-reveal>
               <li><span className="promise-number">1</span><h3>Find your thing</h3><p>Browse the best local kitchens, picked with your cravings in mind.</p></li>
               <li><span className="promise-number">2</span><h3>Make it yours</h3><p>Choose your favorites, add a little extra, and we’ll handle the details.</p></li>
               <li><span className="promise-number">3</span><h3>Dig right in</h3><p>We bring it to your door fresh, fast, and ready for that first bite.</p></li>
@@ -496,7 +618,7 @@ function App() {
           </div>
         </section>
 
-        <section className="bottom-cta">
+        <section className="bottom-cta" data-reveal>
           <div>
             <div className="eyebrow">Your next great meal is right here</div>
             <h2>Go on, get a little crave-y.</h2>
@@ -506,10 +628,28 @@ function App() {
       </main>
 
       <footer className="site-footer">
-        <Brand className="footer-brand" />
-        <p>Good food brings us together.</p>
-        <small>© 2026 Crave Club</small>
+        <div className="footer-top">
+          <div className="footer-about">
+            <Brand className="footer-brand" />
+            <p>Good food brings us together.</p>
+          </div>
+          <nav className="footer-links" aria-label="Footer navigation">
+            <a href="#menu">Menu</a>
+            <a href="#kitchens">Kitchens</a>
+            <a href="#how-it-works">How it works</a>
+            <button onClick={() => setCartOpen(true)}>Your bag</button>
+          </nav>
+        </div>
+        <small>© 2026 Crave Club · Free delivery on orders over ${FREE_DELIVERY_AT}</small>
       </footer>
+
+      {showBagBar && (
+        <button className="mobile-bag-bar" onClick={() => setCartOpen(true)}>
+          <span className="bag-count">{itemCount}</span>
+          <span>View your bag</span>
+          <strong>{money(subtotal)}</strong>
+        </button>
+      )}
 
       {toast && <div className="toast" role="status"><span><Icon name="check" size={14} /></span>{toast}</div>}
 
